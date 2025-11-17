@@ -1,0 +1,49 @@
+name: Generate OpenMensa Feed
+
+on:
+  schedule:
+    - cron: '0 6 * * *'   # 06:00 UTC täglich (anpassen falls nötig)
+  workflow_dispatch:
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run parser
+        run: |
+          python scripts/parser.py
+
+      - name: Validate XML     # fail workflow if malformed
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y libxml2-utils
+          xmllint --noout output/feed.xml
+
+      - name: Check for changes & push to gh-pages
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -B gh-pages
+          mkdir -p .   # ensure workspace
+          git add output/feed.xml
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update feed.xml (generated) [skip ci]"
+            git push origin gh-pages --force
+          fi
